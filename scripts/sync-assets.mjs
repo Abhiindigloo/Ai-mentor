@@ -1,0 +1,15 @@
+import {cp,rm,readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const files=['index.html','app.mjs','core.mjs','store.mjs','native.mjs','styles.css','curriculum.json','manifest.webmanifest','icon.svg','fonts/NotoSansDevanagari.ttf','fonts/OFL.txt'];
+const hash=createHash('sha256');
+for(const f of files)hash.update(await readFile('web/'+f));
+const cache='mentor-'+hash.digest('hex').slice(0,12);
+await writeFile('web/sw.js',`const CACHE=${JSON.stringify(cache)};const FILES=${JSON.stringify(files.map(f=>'./'+f))};
+self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('mentor-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||new URL(e.request.url).origin!==self.location.origin)return;e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).catch(()=>e.request.mode==='navigate'?caches.match('./index.html'):Response.error())));});
+`);
+const target='android/app/src/main/assets/www';
+await rm(target,{recursive:true,force:true});
+await cp('web',target,{recursive:true});
+console.log('Updated offline cache and Android assets.');
