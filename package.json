@@ -1,0 +1,1 @@
+{"name":"indigloo-ai-mentor","version":"0.1.0","private":true,"scripts":{"test":"node tests/web.cjs"},"devDependencies":{"jsdom":"26.1.0"}}

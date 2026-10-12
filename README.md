@@ -1,27 +1,57 @@
-# AI Mentor — Offline Tutor Demo
+# Indigloo AI Mentor — MVP
 
-A self-contained browser demo of a textbook-grounded tutor for three school learning bands. It includes English/Hindi UI, a small built-in passage pack, a scripted offline tutor, optional LiteRT-LM Gemma 4 text generation through WebGPU, optional cloud-adapter detection, local retrieval and prompt budgeting, encrypted progress metadata, and a demo erase control.
+A runnable pilot with a Python API, browser app, native Android app, Postman collection, and Hugging Face training pipeline. English/Hindi sample tutoring works without a model. Optional server AI can use NVIDIA NIM or an OpenAI-compatible Hugging Face endpoint.
 
-## Run it
+## Run the API and browser app
 
-Open `index.html` from a local static server. For example, with Python installed:
+From the repository root, with Python 3.12:
 
-```sh
-python3 -m http.server 8000
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
 ```
 
-Then visit `http://localhost:8000` in a modern browser. The scripted tutor works without a model download. Gemma requires a compatible browser with WebGPU, an internet connection for the initial runtime/model download, and several gigabytes of available storage. Once loaded, generation can run on-device. Browser support and model performance vary.
+Open http://localhost:8000/app/ for the app and http://localhost:8000/docs for interactive API docs. Start in guest mode, or register a nickname and a password of at least 12 characters. A connected account saves questions to the server. Guest mode uses the local sample pack; its browser shell becomes offline-available after the first successful load.
 
-## Important demo limits
+Docker alternative:
 
-- The built-in passages are illustrative sample content, not a complete or curriculum-validated textbook.
-- Retrieval uses local keyword overlap. The guardrail declines when no passage is sufficiently relevant, but this prototype is not a production-grade factuality system.
-- The LiteRT-LM browser model path is text-only. The photo button is retained as an explicit unavailable-state placeholder; no image is sent anywhere.
-- “Simulate airplane mode” disables the optional cloud adapter in the app; it does not turn off the device’s network.
-- Progress metadata is encrypted with AES-GCM in the browser profile. The demo PIN is hard-coded, and browser-side encryption is not a substitute for a production security design.
-- The Claude adapter is used only when a compatible `window.claude` integration is supplied by the host page.
+```bash
+cp .env.example .env
+docker compose up --build -d
+```
 
-## Repository contents
+Bind to localhost and place behind your HTTPS reverse proxy for remote use. Set inference secrets only on the server; see [NVIDIA configuration](docs/NVIDIA.md).
 
-- `index.html` — complete single-file demo.
-- `README.md` — run instructions and prototype limitations.
+## Android
+
+Open `android/` in Android Studio with JDK 17 and Android SDK 35. The app uses Java source, Room local practice, bundled Latin/Devanagari OCR, TTS and optional API sign-in. It works with bundled lessons without a backend or model download.
+
+```bash
+cd android
+./gradlew testDebugUnitTest assembleDebug
+```
+
+The debug APK is produced at `app/build/outputs/apk/debug/app-debug.apk`. Install it on a test phone. In Account, supply your HTTPS API origin. For an Android emulator debug build, use `http://10.0.2.2:8000`. Release builds reject cleartext HTTP. No production signing key is included.
+
+Use Photo to select an image; review recognised text before tapping Ask. Listen uses the installed language voice. Local practice is under Practice; deletion controls are under Account. Server-account deletion and local-practice deletion are separate.
+
+## Postman
+
+Import [collection](postman/AI-Mentor.postman_collection.json) and [local environment](postman/local.postman_environment.json). Run against localhost using a disposable test account: the final request deletes that account. The collection saves bearer tokens and session IDs automatically. It covers auth, capabilities, lessons, tutoring, unrelated-question refusal, history, progress and deletion. OpenAPI is generated from the running API at `/openapi.json`.
+
+## Model training
+
+[Training configuration and status](training/README.md): the 104/28-example topic-split synthetic pilot and LoRA job are prepared. Training has **not** run because the connected Hugging Face credential lacks repository-write permission required to save checkpoints. This MVP does not contain trained weights or an on-device LLM.
+
+## Verification
+
+```bash
+pip install pytest==8.3.5
+python -m pytest -q
+npm ci
+npm test
+```
+
+See [architecture and pilot boundaries](docs/ARCHITECTURE.md). This is not a complete curriculum or a production child-facing service. WebRTC voice is not implemented. The original single-file concept demo remains at `index.html`; the new app is `web/` served by the backend.
