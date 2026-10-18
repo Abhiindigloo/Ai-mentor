@@ -39,7 +39,7 @@ pip install -r requirements.txt pytest==8.3.5
 python -m pytest -q
 python -m uvicorn mentor_api.app:app --host 127.0.0.1 --port 8000   # /app/, /docs, /openapi.json
 ```
-Or with Docker from the repository root: `cp .env.example .env && docker compose up --build -d` (binds 127.0.0.1:8000; put an HTTPS reverse proxy in front for remote use).
+Or with Docker from the repository root: `cp .env.example .env && docker compose up --build -d` (binds 127.0.0.1:8000; put an HTTPS reverse proxy in front for remote use). Rate limits use the client IP from `X-Forwarded-For`, trusted only from `FORWARDED_ALLOW_IPS` — set it to your proxy's address if you deploy differently.
 
 Configuration (environment): `DATABASE_PATH`, `CURRICULUM_PATH`, `WEB_DIR` (defaults resolve to this repo), and optional server AI `MODEL_BASE_URL`, `MODEL_NAME`, `MODEL_API_KEY` — server-side only, never in apps or commits. See [NVIDIA notes](docs/NVIDIA.md).
 

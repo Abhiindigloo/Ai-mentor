@@ -11,5 +11,7 @@ USER mentor
 ENV DATABASE_PATH=/data/mentor.db \
     CURRICULUM_PATH=/srv/curriculum/curriculum.json \
     WEB_DIR=/srv/web
+# Client IPs (used for rate limits) come from X-Forwarded-For only when the
+# connection originates from FORWARDED_ALLOW_IPS (uvicorn default: 127.0.0.1).
 EXPOSE 8000
-CMD ["python","-m","uvicorn","mentor_api.app:app","--host","0.0.0.0","--port","8000","--no-proxy-headers"]
+CMD ["python","-m","uvicorn","mentor_api.app:app","--host","0.0.0.0","--port","8000","--proxy-headers"]
