@@ -1,48 +1,67 @@
-# AI Mentor — web and Android source
+# Indigloo AI Mentor
 
-This is the reconstructed 0.1.1 Android source project. The complete learner UI, curriculum and local web logic were recovered from the saved 0.1.0 APK. Kotlin and Gradle sources were reconstructed from the earlier implementation. This is editable source, not a decompiled APK.
+An offline-first, bilingual (English/Hindi) Socratic tutor for K-12 students on low-cost devices, with a backend for accounts, history and optional server AI. Pre-pilot: 15 illustrative lessons, no students yet.
 
-## Build Android
+This repository is a **monorepo**. See [ADR 0001](docs/adr/0001-monorepo-layout.md) for why.
 
-Requirements: JDK 21, Android SDK platform 35/build-tools 35, and internet access for initial Gradle/dependency downloads. Runtime learning is offline.
-
-1. Open `android/` in Android Studio and select JDK 21 for Gradle.
-2. Set `ANDROID_HOME`, or create `android/local.properties` with `sdk.dir=/absolute/path/to/Android/sdk`.
-3. From this project root:
-
-```sh
-node scripts/sync-assets.mjs
-cd android
-./gradlew assembleDebug
+```
+apps/web/              Learner app (vanilla ES modules, PWA). Also bundled inside the Android app.
+apps/android/          Android shell (Kotlin): WebView host, encrypted vault, OCR, TTS, optional on-device LLM.
+services/api/          Backend (Python FastAPI + SQLite): accounts, sessions, chat, progress, optional server AI.
+packages/curriculum/   Single source of the lesson pack, used by web, Android, API and training.
+packages/contracts/    OpenAPI spec and Postman collection.
+training/              Hugging Face LoRA pilot (prepared, not run).
+scripts/               Build helpers (sync-assets).
+tests/                 Repo-level checks (CI configuration).
+docs/                  Architecture, NVIDIA notes, validation record, ADRs.
+index.html             Original single-file concept demo.
 ```
 
-Windows: `gradlew.bat assembleDebug`. If executable permissions were lost when extracting the ZIP, run `chmod +x android/gradlew`.
+## Quick start
 
-APK output: `android/app/build/outputs/apk/debug/app-debug.apk`.
-Install with `adb install -r <apk-path>`. Package: `co.indigloo.mentor`; Android 8+; arm64-v8a and x86_64. A different debug signing key may require uninstalling the earlier APK first, which deletes its local data. Release signing keys are deliberately not included.
+Requirements: Node ≥ 20, Python 3.12, JDK 21 + Android SDK 35 (Android only).
 
-## Source map
+```bash
+npm test                 # web logic + CI config checks (no npm dependencies)
+npm run sync             # after editing apps/web or packages/curriculum — commit the result
+```
 
-- `android/app/src/main/java/co/indigloo/mentor/MainActivity.kt`: local WebView host, allowlisted bridge, document picker, Latin/Hindi OCR, offline TTS and local AI.
-- `android/app/src/main/java/co/indigloo/mentor/Vault.kt`: AES-256-GCM encrypted state with Android Keystore and atomic file writes.
-- `android/app/src/main/AndroidManifest.xml`: offline permission policy and launcher.
-- `android/app/build.gradle.kts`: pinned Android dependencies and SDK configuration.
-- `web/`: editable UI, tutoring, 15 bilingual starter lessons, quizzes, spaced revision, local storage, offline font and service worker.
-- `scripts/sync-assets.mjs`: regenerate the offline cache and copy web files into Android assets after edits.
-- `tests/core.mjs`: executable learning-logic checks (`npm test`).
+**Web app alone (offline guest mode):**
+```bash
+python3 -m http.server 8000 --directory apps/web    # http://localhost:8000
+```
 
-## Web
+**Backend (also serves the web app at /app/):**
+```bash
+cd services/api
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt pytest==8.3.5
+python -m pytest -q
+python -m uvicorn mentor_api.app:app --host 127.0.0.1 --port 8000   # /app/, /docs, /openapi.json
+```
+Or with Docker from the repository root: `cp .env.example .env && docker compose up --build -d` (binds 127.0.0.1:8000; put an HTTPS reverse proxy in front for remote use).
 
-Run `python3 -m http.server 8000 --directory web`, then open http://localhost:8000. Use HTTPS when hosting. Offline browser reload requires an initial successful service-worker installation. No npm packages are required for this source package.
+Configuration (environment): `DATABASE_PATH`, `CURRICULUM_PATH`, `WEB_DIR` (defaults resolve to this repo), and optional server AI `MODEL_BASE_URL`, `MODEL_NAME`, `MODEL_API_KEY` — server-side only, never in apps or commits. See [NVIDIA notes](docs/NVIDIA.md).
 
-## Native features
+**Android:**
+```bash
+npm run sync
+cd apps/android && ./gradlew testDebugUnitTest assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+Set `ANDROID_HOME` or `apps/android/local.properties` (`sdk.dir=...`). Package `co.indigloo.mentor`, Android 8+, arm64-v8a and x86_64. Release signing keys are not included.
 
-OCR uses bundled ML Kit Latin and Devanagari recognizers and the system image picker. The learner reviews extracted text before asking. Text-to-speech requires a matching installed offline Android voice. Optional local AI accepts a compatible Android CPU `.litertlm` model for LiteRT-LM 0.8.0. Model weights are not included. Arbitrary GGUF or browser/GPU models are not compatible. RAM/storage checks cannot guarantee any particular model will fit; validate on target phones. Default guided lessons need no model.
+**API contract tests:** import `packages/contracts/postman/` into Postman; use a disposable account — the last request deletes it.
 
-## Validation and limitations
+**Training pilot:** see [training/README.md](training/README.md). `python training/prepare_data.py` regenerates data from the curriculum.
 
-Reconstructed source: bridge action/payload coverage, resource/XML structure, matching web assets and core logic were checked. This reconstructed Android project has not been compiled in the restored workspace; do not treat the earlier 0.1.0 APK as a build of this 0.1.1 source. The previous implementation did compile, and its browser acceptance flow passed before the workspace reset. OCR, Keystore, TTS and model inference need physical-device acceptance testing.
+## Current limitations
 
-The pack is illustrative, not a full validated curriculum. AI grounding is a prompt constraint, not a factuality guarantee. No cloud backend, account system, trained model, Room database or WebRTC voice chat is included. Android state is stored using the encrypted file vault; browser state uses IndexedDB. Browser encryption does not protect against same-origin malicious JavaScript. Deletion is not a forensic secure-wipe guarantee.
+- The web and Android apps run fully offline but **do not talk to the backend yet**. Offline-first sync (outbox, delta pull, persistent sign-in) is the next milestone; the earlier connected Java client remains in git history on `feature/ai-mentor-mvp` for reference.
+- Retrieval is keyword-based; content is illustrative and needs teacher review.
+- No parental-consent flow, age gate, MFA or password recovery — required before any pilot with children.
+- Physical-device validation (OCR, TTS, memory, battery) is pending.
 
-Noto Sans Devanagari is included under `web/fonts/OFL.txt`. Third-party dependencies retain their own licenses.
+See [architecture and boundaries](docs/ARCHITECTURE.md).
+
+Noto Sans Devanagari is included under `apps/web/fonts/OFL.txt`. Third-party dependencies retain their own licenses.

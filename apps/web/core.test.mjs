@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {retrieve,initialState,recordAttempt,buildPrompt,lessonReply} from '../web/core.mjs';
-const lessons=JSON.parse(await readFile(new URL('../web/curriculum.json',import.meta.url)));
+import {retrieve,initialState,recordAttempt,buildPrompt,lessonReply} from './core.mjs';
+const lessons=JSON.parse(await readFile(new URL('../../packages/curriculum/curriculum.json',import.meta.url)));
 assert.equal(lessons.length,15);
 for(const doc of lessons)for(const lang of ['en','hi'])for(const mode of ['hint','answer','simple','steps','activity','example'])assert.ok(lessonReply(doc,lang,mode).length>0);
 const leaf=retrieve('Why are leaves green?',lessons,'nova',null).doc;

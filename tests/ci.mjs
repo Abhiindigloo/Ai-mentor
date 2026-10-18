@@ -35,11 +35,11 @@ function setupAndroidPackages(workflow) {
 
 const [workflow, gradle] = await Promise.all([
   readRepoFile('.github/workflows/ci.yml'),
-  readRepoFile('android/app/build.gradle.kts'),
+  readRepoFile('apps/android/app/build.gradle.kts'),
 ]);
 
 const sdkMatch = gradle.match(/compileSdk\s*=\s*(\d+)/);
-assert.ok(sdkMatch, 'android/app/build.gradle.kts must declare compileSdk');
+assert.ok(sdkMatch, 'apps/android/app/build.gradle.kts must declare compileSdk');
 const sdk = sdkMatch[1];
 
 const packages = setupAndroidPackages(workflow);
