@@ -101,3 +101,40 @@ def test_web_and_contract(client):
     collection=json.loads((REPO_ROOT/'packages'/'contracts'/'postman'/'AI-Mentor.postman_collection.json').read_text(encoding='utf-8'))
     assert len(collection['item'])>=12
     assert '/v1/chat' in schema['paths']
+
+def test_stale_model_reply_does_not_overwrite_newer_context(client,monkeypatch):
+    """A slow model reply must not restore a topic after a newer request changed it."""
+    import asyncio
+    import httpx
+    h=register(client);s=session(client,h)
+    async def scenario():
+        gate=asyncio.Event()
+        async def slow(question,*args):
+            await gate.wait()
+            return 'A generated explanation.'
+        monkeypatch.setattr('mentor_api.app.model_explanation',slow)
+        transport=httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport,base_url='http://test') as ac:
+            send=lambda q,**kw: ac.post('/v1/chat',headers=h,json=dict(session_id=s,question=q,**kw))
+            older=asyncio.create_task(send('Why are leaves green?',use_model=True))
+            await asyncio.sleep(0.2)                         # older request is now waiting on the model
+            newer=await send('Who won the 2011 cricket world cup?')
+            assert newer.json()['lesson_id'] is None         # newer request clears the topic
+            gate.set()
+            assert (await older).json()['lesson_id']=='green-leaves'
+            follow=await send('explain again')
+            return follow.json()
+    follow=asyncio.run(scenario())
+    assert follow['lesson_id'] is None, 'stale reply restored the old topic'
+
+def test_existing_database_gains_session_seq_column(tmp_path,monkeypatch):
+    import sqlite3
+    path=tmp_path/'old.db'
+    old=sqlite3.connect(path)
+    old.execute('CREATE TABLE sessions(id TEXT PRIMARY KEY, user_id TEXT, band TEXT, lang TEXT, last_lesson TEXT)')
+    old.execute("INSERT INTO sessions VALUES('s1','u1','nova','en','green-leaves')")
+    old.commit();old.close()
+    monkeypatch.setenv('DATABASE_PATH',str(path))
+    with db() as c:
+        row=c.execute("SELECT last_lesson,seq FROM sessions WHERE id='s1'").fetchone()
+    assert row['last_lesson']=='green-leaves' and row['seq']==0

@@ -59,6 +59,19 @@ jobs:
         run: python training/prepare_data.py && git diff --exit-code training/train.jsonl training/eval.jsonl
       - name: Build API image
         run: docker build -f services/api/Dockerfile -t ai-mentor-api:ci .
+      - name: Smoke-test the running container
+        run: |
+          docker run -d --name api-smoke -p 127.0.0.1:8000:8000 ai-mentor-api:ci
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8000/health && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/health
+          curl -fsS -o /dev/null http://127.0.0.1:8000/app/
+          test "$(curl -fsS http://127.0.0.1:8000/v1/lessons | python -c 'import json,sys; print(len(json.load(sys.stdin)["lessons"]))')" = 15
+      - name: Container logs
+        if: always()
+        run: docker logs api-smoke || true
 
   android:
     runs-on: ubuntu-latest

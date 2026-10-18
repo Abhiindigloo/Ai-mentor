@@ -6,8 +6,10 @@ checkout without configuration; the Docker image sets explicit paths.
 import os
 from pathlib import Path
 
-API_ROOT: Path = Path(__file__).resolve().parents[1]
-REPO_ROOT: Path = API_ROOT.parents[1]
+# `.parent` chains (unlike `.parents[n]`) never raise on shallow layouts such
+# as the container's /srv/mentor_api, where only env-var paths are used.
+API_ROOT: Path = Path(__file__).resolve().parent.parent
+REPO_ROOT: Path = API_ROOT.parent.parent
 
 
 def _path(env: str, default: Path) -> Path:

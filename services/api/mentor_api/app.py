@@ -30,11 +30,17 @@ def db():
     c.executescript('''
     CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, username TEXT UNIQUE, salt TEXT, password TEXT);
     CREATE TABLE IF NOT EXISTS tokens(hash TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id) ON DELETE CASCADE, expires REAL);
-    CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id) ON DELETE CASCADE, band TEXT, lang TEXT, last_lesson TEXT);
+    CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id) ON DELETE CASCADE, band TEXT, lang TEXT, last_lesson TEXT, seq INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS turns(id INTEGER PRIMARY KEY, session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE, question TEXT, response TEXT, created REAL);
     CREATE TABLE IF NOT EXISTS progress(user_id TEXT REFERENCES users(id) ON DELETE CASCADE, lesson_id TEXT, visits INTEGER, updated REAL, PRIMARY KEY(user_id,lesson_id));
     CREATE TABLE IF NOT EXISTS limits(bucket TEXT PRIMARY KEY, window INTEGER, count INTEGER);
     ''')
+    if 'seq' not in {row['name'] for row in c.execute('PRAGMA table_info(sessions)')}:
+        try:
+            c.execute('ALTER TABLE sessions ADD COLUMN seq INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError as err:  # another connection migrated first
+            if 'duplicate column' not in str(err).lower():
+                raise
     try:
         yield c
         c.commit()
@@ -141,7 +147,7 @@ def lessons(band: Literal['koko','nova','principal'] | None=None):
 def create_session(data: SessionInput,user=Depends(current_user)):
     limited('session:'+user['id'],10)
     sid=str(uuid.uuid4())
-    with db() as c: c.execute('INSERT INTO sessions VALUES(?,?,?,?,NULL)',(sid,user['id'],data.band,data.lang))
+    with db() as c: c.execute('INSERT INTO sessions(id,user_id,band,lang) VALUES(?,?,?,?)',(sid,user['id'],data.band,data.lang))
     return dict(id=sid,**data.model_dump())
 def owned(c,sid,uid):
     row=c.execute('SELECT * FROM sessions WHERE id=? AND user_id=?',(sid,uid)).fetchone()
@@ -168,7 +174,11 @@ async def model_explanation(question,lesson,lang,mode):
 async def chat(data: ChatInput,user=Depends(current_user)):
     if not data.question.strip(): raise HTTPException(422,'Question cannot be blank')
     limited('chat:'+user['id'])
-    with db() as c: session=owned(c,data.session_id,user['id'])
+    with db() as c:
+        session=owned(c,data.session_id,user['id'])
+        # Reserve this request's place in the session; only the newest request may set the topic.
+        c.execute('UPDATE sessions SET seq=seq+1 WHERE id=?',(data.session_id,))
+        ticket=c.execute('SELECT seq FROM sessions WHERE id=?',(data.session_id,)).fetchone()['seq']
     result=answer(data.question,session['band'],session['lang'],data.mode,session['last_lesson'])
     result.update(model_requested=data.use_model,model_status='not_requested')
     if data.use_model and result['lesson_id']:
@@ -179,7 +189,7 @@ async def chat(data: ChatInput,user=Depends(current_user)):
     elif data.use_model: result['model_status']='declined_before_model'
     with db() as c:
         owned(c,data.session_id,user['id'])
-        c.execute('UPDATE sessions SET last_lesson=? WHERE id=?',(result['lesson_id'],data.session_id))
+        c.execute('UPDATE sessions SET last_lesson=? WHERE id=? AND seq=?',(result['lesson_id'],data.session_id,ticket))
         c.execute('INSERT INTO turns(session_id,question,response,created) VALUES(?,?,?,?)',(data.session_id,data.question,json.dumps(result,ensure_ascii=False),time.time()))
         if result['lesson_id']:
             c.execute('INSERT INTO progress VALUES(?,?,1,?) ON CONFLICT(user_id,lesson_id) DO UPDATE SET visits=visits+1,updated=excluded.updated',(user['id'],result['lesson_id'],time.time()))
