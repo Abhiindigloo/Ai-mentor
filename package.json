@@ -1,1 +1,1 @@
-{"name":"ai-mentor","version":"0.1.1","private":true,"type":"module","scripts":{"test":"node tests/core.mjs","android:sync":"node scripts/sync-assets.mjs"},"engines":{"node":">=20"}}
+{"name":"ai-mentor","version":"0.1.1","private":true,"type":"module","scripts":{"test":"node tests/core.mjs && node tests/ci.mjs","android:sync":"node scripts/sync-assets.mjs"},"engines":{"node":">=20"}}
